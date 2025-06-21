@@ -18,11 +18,9 @@ package {{ .Package }}
 
 import (
 	"context"
-	"time"
 	
 	"gofr.dev/pkg/gofr"
 	"gofr.dev/pkg/gofr/container"
-	gofrgRPC "gofr.dev/pkg/gofr/grpc"
 	"google.golang.org/grpc"
 
 	{{- if $hasUnary }}
@@ -31,6 +29,10 @@ import (
 	{{- end }}
 	
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
+	{{- range .Imports }}
+	{{ . }}
+	{{- end }}
 )
 
 // New{{ .Service }}GoFrServer creates a new instance of {{ .Service }}GoFrServer
@@ -267,7 +269,7 @@ func (h *{{ $.Service }}ServerWrapper) {{ .Name }}(stream {{ $.Service }}_{{ .Na
 {{- else }}
 // Unary method handler for {{ .Name }}
 func (h *{{ $.Service }}ServerWrapper) {{ .Name }}(ctx context.Context, req *{{ .Request }}) (*{{ .Response }}, error) {
-	gctx := h.getGofrContext(ctx, &{{ .Request }}Wrapper{ctx: ctx, {{ .Request }}: req})
+	gctx := h.getGofrContext(ctx, &{{ .RawRequest }}Wrapper{ctx: ctx, {{ .RawRequest }}: req})
 	
 	res, err := h.server.{{ .Name }}(gctx)
 	if err != nil {
@@ -324,34 +326,37 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	{{- range .Imports }}
+	{{ . }}
+	{{- end }}
 )
 
 // Request Wrappers
 {{- range $request := .Requests }}
-type {{ $request }}Wrapper struct {
+type {{ $request.RawRequest }}Wrapper struct {
 	ctx context.Context
-	*{{ $request }}
+	*{{ $request.Request }}
 }
 
-func (h *{{ $request }}Wrapper) Context() context.Context {
+func (h *{{ $request.RawRequest }}Wrapper) Context() context.Context {
 	return h.ctx
 }
 
-func (h *{{ $request }}Wrapper) Param(s string) string {
+func (h *{{ $request.RawRequest }}Wrapper) Param(s string) string {
 	return ""
 }
 
-func (h *{{ $request }}Wrapper) PathParam(s string) string {
+func (h *{{ $request.RawRequest }}Wrapper) PathParam(s string) string {
 	return ""
 }
 
-func (h *{{ $request }}Wrapper) Bind(p interface{}) error {
+func (h *{{ $request.RawRequest }}Wrapper) Bind(p interface{}) error {
 	ptr := reflect.ValueOf(p)
 	if ptr.Kind() != reflect.Ptr {
 		return fmt.Errorf("expected a pointer, got %T", p)
 	}
 
-	hValue := reflect.ValueOf(h.{{ $request }}).Elem()
+	hValue := reflect.ValueOf(h.{{ $request.RawRequest }}).Elem()
 	ptrValue := ptr.Elem()
 
 	for i := 0; i < hValue.NumField(); i++ {
@@ -368,11 +373,11 @@ func (h *{{ $request }}Wrapper) Bind(p interface{}) error {
 	return nil
 }
 
-func (h *{{ $request }}Wrapper) HostName() string {
+func (h *{{ $request.RawRequest }}Wrapper) HostName() string {
 	return ""
 }
 
-func (h *{{ $request }}Wrapper) Params(s string) []string {
+func (h *{{ $request.RawRequest }}Wrapper) Params(s string) []string {
 	return nil
 }
 {{- end }}`
