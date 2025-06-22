@@ -18,6 +18,7 @@ package {{ .Package }}
 
 import (
 	"context"
+	"errors"
 	
 	"gofr.dev/pkg/gofr"
 	"gofr.dev/pkg/gofr/container"
@@ -27,6 +28,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	{{- end }}
+
+	"moneyx.golang.framework/Errors"
 	
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -273,7 +276,7 @@ func (h *{{ $.Service }}ServerWrapper) {{ .Name }}(ctx context.Context, req *{{ 
 	
 	res, err := h.server.{{ .Name }}(gctx)
 	if err != nil {
-		return nil, err
+		return nil, getStatusCodeError(err)
 	}
 
 	resp, ok := res.(*{{ .Response }})
@@ -309,6 +312,20 @@ func (h *{{ .Service }}ServerWrapper) getGofrContext(ctx context.Context, req go
 		Context:   ctx,
 		Container: h.Container,
 		Request:   req,
+	}
+}
+
+// getStatusCodeError returns the proper status code and error
+func getStatusCodeError(err error) error {
+	var domainErr *Errors.DomainException
+	var domainAggregateErr *Errors.DomainAggregateLockException
+	switch {
+	case errors.As(err, &domainErr):
+		return status.Errorf(codes.Aborted, domainErr.MessageTemplate, domainErr.DescriptionMetadata)
+	case errors.As(err, &domainAggregateErr):
+		return status.Errorf(codes.Aborted, domainAggregateErr.MessageTemplate, domainAggregateErr.DescriptionMetadata)
+	default:
+		return status.Errorf(codes.Unknown, "Something went wrong!")
 	}
 }
 `
