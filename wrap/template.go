@@ -29,7 +29,8 @@ import (
 	"google.golang.org/grpc/status"
 	{{- end }}
 
-	"moneyx.golang.framework/Errors"
+	MoneyxErrors "moneyx.golang.framework/moneyxerrors"
+	Validator "moneyx.golang.framework/validator"
 	
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -45,6 +46,11 @@ func New{{ .Service }}GoFrServer() *{{ .Service }}GoFrServer {
 	}
 }
 
+// New{{ .Service }}GoFrValidation creates a new instance of {{ .Service }}GoFrValidation
+func New{{ .Service }}GoFrValidation() *{{ .Service }}GoFrValidation {
+	return &{{ .Service }}GoFrValidation{}
+}
+
 // {{ .Service }}ServerWithGofr is the interface for the server implementation
 type {{ .Service }}ServerWithGofr interface {
 {{- range .Methods }}
@@ -56,12 +62,20 @@ type {{ .Service }}ServerWithGofr interface {
 {{- end }}
 }
 
+// {{ .Service }}ValidationWithGofr is the interface for the validation implementation
+type {{ .Service }}ValidationWithGofr interface {
+{{- range .Methods }}
+	{{ .Name }}(*Validator.EntryValidator[*{{ .RawRequest }}Wrapper])
+{{- end }}
+}
+
 // {{ .Service }}ServerWrapper wraps the server and handles request and response logic
 type {{ .Service }}ServerWrapper struct {
 	{{ .Service }}Server
 	*healthServer
 	Container *container.Container
 	server    {{ .Service }}ServerWithGofr
+	validator {{ .Service }}ValidationWithGofr
 }
 
 {{- $hasStream := false }}
@@ -272,8 +286,16 @@ func (h *{{ $.Service }}ServerWrapper) {{ .Name }}(stream {{ $.Service }}_{{ .Na
 {{- else }}
 // Unary method handler for {{ .Name }}
 func (h *{{ $.Service }}ServerWrapper) {{ .Name }}(ctx context.Context, req *{{ .Request }}) (*{{ .Response }}, error) {
-	gctx := h.getGofrContext(ctx, &{{ .RawRequest }}Wrapper{ctx: ctx, {{ .RawRequest }}: req})
+	wrapper := &{{ .RawRequest }}Wrapper{ctx: ctx, {{ .RawRequest }}: req}
+	gctx := h.getGofrContext(ctx, wrapper)
 	
+	entryValidator := Validator.NewEntryValidator[*{{ .RawRequest }}Wrapper](wrapper)
+	h.validator.{{ .Name }}(entryValidator)
+	var err error
+	err = entryValidator.Validate()
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
 	res, err := h.server.{{ .Name }}(gctx)
 	if err != nil {
 		return nil, getStatusCodeError(err)
@@ -293,10 +315,11 @@ func (h *{{ $.Service }}ServerWrapper) {{ .Name }}(ctx context.Context, req *{{ 
 func (h *{{ .Service }}ServerWrapper) mustEmbedUnimplemented{{ .Service }}Server() {}
 
 // Register{{ .Service }}ServerWithGofr registers the server
-func Register{{ .Service }}ServerWithGofr(app *gofr.App, srv {{ .Service }}ServerWithGofr) {
-	registerServerWithGofr(app, srv, func(s grpc.ServiceRegistrar, srv any) {
+func Register{{ .Service }}ServerWithGofr(app *gofr.App, srv {{ .Service }}ServerWithGofr, val {{ .Service }}ValidationWithGofr) {
+	registerServerWithGofr(app, srv, val, func(s grpc.ServiceRegistrar, srv any, val any) {
 		wrapper := &{{ .Service }}ServerWrapper{
 			server: srv.({{ .Service }}ServerWithGofr),
+			validator: val.({{ .Service }}ValidationWithGofr),
 			healthServer: getOrCreateHealthServer(),
 		}
 
@@ -317,8 +340,8 @@ func (h *{{ .Service }}ServerWrapper) getGofrContext(ctx context.Context, req go
 
 // getStatusCodeError returns the proper status code and error
 func getStatusCodeError(err error) error {
-	var domainErr *Errors.DomainException
-	var domainAggregateErr *Errors.DomainAggregateLockException
+	var domainErr *MoneyxErrors.DomainException
+	var domainAggregateErr *MoneyxErrors.DomainAggregateLockException
 	switch {
 	case errors.As(err, &domainErr):
 		return status.Errorf(codes.Aborted, domainErr.MessageTemplate, domainErr.DescriptionMetadata)
@@ -581,7 +604,7 @@ func getOrCreateHealthServer() *healthServer {
 	return globalHealthServer
 }
 
-func registerServerWithGofr(app *gofr.App, srv any, registerFunc func(grpc.ServiceRegistrar, any)) {
+func registerServerWithGofr(app *gofr.App, srv any, val any, registerFunc func(grpc.ServiceRegistrar, any, any)) {
 	var s grpc.ServiceRegistrar = app
 	h := getOrCreateHealthServer()
 
@@ -597,7 +620,7 @@ func registerServerWithGofr(app *gofr.App, srv any, registerFunc func(grpc.Servi
 	}
 
 	// Register the provided server
-	registerFunc(s, srv)
+	registerFunc(s, srv, val)
 }
 
 func (h *healthServer) Check(ctx *gofr.Context, req *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
@@ -759,5 +782,26 @@ func (h *HealthClientWrapper) Watch(ctx *gofr.Context, in *grpc_health_v1.Health
 
 	return result.(grpc.ServerStreamingClient[grpc_health_v1.HealthCheckResponse]), nil
 }
+`
+	validationTemplate = `// versions:
+// 	gofr-cli v0.6.0
+// 	gofr.dev v1.37.0
+// 	source: {{ .Source }}
+
+package {{ .Package }}
+
+import Validator "moneyx.golang.framework/validator"
+
+// {{ $.Service }}GoFrValidation defines the input validator implementation.
+// Customize the struct with required dependencies and fields as needed.
+
+type {{ $.Service }}GoFrValidation struct {
+}
+
+{{- range .Methods }}
+func (s *{{ $.Service }}GoFrValidation) {{ .Name }}(validator *Validator.EntryValidator[*{{ .RawRequest }}Wrapper]) {
+	
+}
+{{- end }}
 `
 )

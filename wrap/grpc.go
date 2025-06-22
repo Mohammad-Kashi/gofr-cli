@@ -15,6 +15,7 @@ import (
 
 const (
 	filePerm                = 0644
+	validationFileSuffix    = "_validation.go"
 	serverFileSuffix        = "_server.go"
 	serverWrapperFileSuffix = "_gofr.go"
 	clientFileSuffix        = "_client.go"
@@ -141,6 +142,7 @@ func BuildGRPCGoFrServer(ctx *gofr.Context) (any, error) {
 		{FileSuffix: serverHealthFile, CodeGenerator: generateGoFrServerHealthWrapper},
 		{FileSuffix: serverRequestFile, CodeGenerator: generateGoFrRequestWrapper},
 		{FileSuffix: serverFileSuffix, CodeGenerator: generateGoFrServer},
+		{FileSuffix: validationFileSuffix, CodeGenerator: generateGoFrServerValidator},
 	}
 
 	return generateWrapper(ctx, gRPCServer...)
@@ -314,6 +316,10 @@ func executeTemplate(ctx *gofr.Context, data *WrapperData, tmpl string) string {
 }
 
 // Template generators.
+func generateGoFrServerValidator(ctx *gofr.Context, data *WrapperData) string {
+	return executeTemplate(ctx, data, validationTemplate)
+}
+
 func generateGoFrServerWrapper(ctx *gofr.Context, data *WrapperData) string {
 	return executeTemplate(ctx, data, wrapperTemplate)
 }

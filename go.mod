@@ -1,6 +1,8 @@
 module gofr.dev/cli/gofr
 
-go 1.22
+go 1.23.5
+
+toolchain go1.24.1
 
 require (
 	github.com/emicklei/proto v1.13.3
@@ -60,6 +62,7 @@ require (
 	github.com/redis/go-redis/v9 v9.7.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/segmentio/kafka-go v0.4.47 // indirect
+	github.com/shivajichalise/validator v1.0.2 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.54.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.56.0 // indirect

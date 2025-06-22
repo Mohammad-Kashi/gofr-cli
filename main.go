@@ -15,7 +15,7 @@ func main() {
 
 	cli.SubCommand("version",
 		func(*gofr.Context) (interface{}, error) {
-			return CLIVersion, nil
+			return "v0.7.2", nil
 		},
 	)
 
